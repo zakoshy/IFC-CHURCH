@@ -1,4 +1,6 @@
 import React from 'react';
+import { supabase } from '../lib/supabase';
+import { format } from 'date-fns';
 import { 
   Users, 
   Calendar, 
@@ -19,16 +21,63 @@ import { Profile } from '../types';
 interface Props {
   activeTab: string;
   profile: Profile | null;
+  onTabChange: (tab: string) => void;
 }
 
-export function DashboardMember({ activeTab, profile }: Props) {
+export function DashboardMember({ activeTab, profile, onTabChange }: Props) {
   
+  const [sermons, setSermons] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    if (activeTab === 'sermons') fetchPublishedSermons();
+  }, [activeTab]);
+
+  async function fetchPublishedSermons() {
+    const { data } = await supabase.from('sermons').select('*').eq('is_published', true).order('created_at', { ascending: false });
+    if (data) setSermons(data);
+  }
+
   if (activeTab === 'counseling') {
-    return <CounselingChat />;
+    return <CounselingChat userId={profile?.id} />;
   }
 
   if (activeTab === 'give') {
     return <MpesaPayment />;
+  }
+
+  if (activeTab === 'sermons') {
+    return (
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <header>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Church Sermons</h1>
+          <p className="text-sm text-slate-500 mt-1">Nourish your soul with recent teachings and words of encouragement.</p>
+        </header>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {sermons.map((s) => (
+            <div key={s.id} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm hover:shadow-md transition-all">
+              <div className="flex items-center gap-2 mb-3">
+                 <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-2 py-0.5 rounded">Teaching</span>
+                 <span className="text-[10px] font-bold text-slate-400">{format(new Date(s.created_at), 'MMM d, yyyy')}</span>
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 mb-2">{s.title}</h3>
+              <p className="text-slate-500 text-[13px] line-clamp-3 mb-4 leading-relaxed italic">
+                {s.content.substring(0, 200)}...
+              </p>
+              <button className="text-[10px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-2 hover:gap-3 transition-all">
+                Read Full Message <ArrowRight size={14} />
+              </button>
+            </div>
+          ))}
+          {sermons.length === 0 && (
+            <div className="col-span-full py-20 flex flex-col items-center justify-center text-slate-300">
+              <BookOpen size={48} className="mb-4 opacity-20" />
+              <p className="text-xs font-black uppercase tracking-widest">No published sermons yet.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
   }
 
   if (activeTab !== 'dashboard') {
@@ -58,8 +107,8 @@ export function DashboardMember({ activeTab, profile }: Props) {
             <div className="w-10 h-10 bg-emerald-500 rounded-lg flex items-center justify-center mb-4 shadow-lg shadow-emerald-500/20">
               <MessageCircle size={20} />
             </div>
-            <h3 className="text-lg font-bold mb-1 tracking-tight">Need Guidance?</h3>
-            <p className="text-slate-400 text-xs mb-4 leading-relaxed">Chat privately with our AI Scripture Counselor for encouragement.</p>
+            <h3 className="text-lg font-bold mb-1 tracking-tight">Scripture Counselor</h3>
+            <p className="text-slate-400 text-xs mb-4 leading-relaxed">Seek spiritual guidance and encouragement rooted in the Word of God.</p>
             <button className="flex items-center gap-2 bg-white text-slate-900 px-4 py-2 rounded-lg text-[11px] font-bold uppercase tracking-wider group-hover:gap-3 transition-all">
               Talk Now <ArrowRight size={14} />
             </button>

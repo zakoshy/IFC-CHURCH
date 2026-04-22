@@ -63,7 +63,7 @@ export const LandingPage = () => {
               <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-400">Welcome Home</span>
             </div>
             
-            <h1 className="text-6xl md:text-8xl font-black tracking-tighter mb-8 leading-[0.9]">
+            <h1 className="text-6xl md:text-8xl font-display font-black tracking-tighter mb-8 leading-[0.9]">
               IFC <span className="text-emerald-500">CHURCH</span>
             </h1>
             
@@ -93,7 +93,7 @@ export const LandingPage = () => {
                    <div className="w-20 h-20 bg-emerald-500 rounded-2xl flex items-center justify-center mx-auto shadow-2xl shadow-emerald-500/20">
                       <Heart size={40} className="text-white" />
                    </div>
-                   <h3 className="text-2xl font-black tracking-tight">Sunday Service</h3>
+                   <h3 className="text-2xl font-display font-black tracking-tight">Sunday Service</h3>
                    <div className="space-y-1">
                       <p className="text-slate-400 text-sm font-bold uppercase tracking-widest">Main Sanctuary</p>
                       <p className="text-slate-100 text-xl font-black">10:00 AM - 12:30 PM</p>
@@ -120,7 +120,7 @@ export const LandingPage = () => {
           className="space-y-6 group"
         >
           <div className="w-12 h-0.5 bg-emerald-500 group-hover:w-24 transition-all duration-500"></div>
-          <h2 className="text-4xl font-black tracking-tight text-slate-900 border-l-4 border-emerald-500 pl-6">Our Vision</h2>
+          <h2 className="text-4xl font-display font-black tracking-tight text-slate-900 border-l-4 border-emerald-500 pl-6">Our Vision</h2>
           <p className="text-slate-600 text-lg leading-relaxed font-serif">
             To be a global catalyst for kingdom transformation, raising a generation that manifests the love, power, and wisdom of God in every sphere of influence. We envision a church without walls, where the Word of God is the foundation of every life.
           </p>
@@ -134,7 +134,7 @@ export const LandingPage = () => {
           className="space-y-6 group"
         >
           <div className="w-12 h-0.5 bg-emerald-500 group-hover:w-24 transition-all duration-500"></div>
-          <h2 className="text-4xl font-black tracking-tight text-slate-900 border-l-4 border-emerald-500 pl-6">Our Mission</h2>
+          <h2 className="text-4xl font-display font-black tracking-tight text-slate-900 border-l-4 border-emerald-500 pl-6">Our Mission</h2>
           <p className="text-slate-600 text-lg leading-relaxed font-serif">
             Our mission is to equip believers through sound biblical teaching, passionate worship, and intentional discipleship. We are committed to reaching the unreached, restoring the broken, and empowering leaders to advance the Great Commission.
           </p>
@@ -155,7 +155,7 @@ export const LandingPage = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-16">
           <div className="lg:col-span-2 space-y-8">
             <div className="flex items-center justify-between pb-6 border-b border-slate-100">
-              <h2 className="text-3xl font-black text-slate-900 flex items-center gap-3">
+              <h2 className="text-3xl font-display font-black text-slate-900 flex items-center gap-3">
                 <div className="p-2 bg-emerald-50 rounded-lg">
                   <Bell className="text-emerald-600" size={24} />
                 </div>
@@ -185,7 +185,7 @@ export const LandingPage = () => {
                           {ann.created_at ? new Date(ann.created_at).toLocaleDateString() : 'Recent'}
                         </span>
                       </div>
-                      <h3 className="text-xl font-black text-slate-900 mb-3 line-clamp-2 leading-tight group-hover:text-emerald-600 transition-colors">{ann.title}</h3>
+                      <h3 className="text-xl font-display font-black text-slate-900 mb-3 line-clamp-2 leading-tight group-hover:text-emerald-600 transition-colors">{ann.title}</h3>
                       <p className="text-slate-500 text-sm line-clamp-3 leading-relaxed mb-6 font-medium italic">"{ann.content}"</p>
                       <div className="mt-auto pt-6 border-t border-slate-50">
                         <button className="text-slate-900 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2 group-hover:gap-3 transition-all">
@@ -212,7 +212,7 @@ export const LandingPage = () => {
               <div className="absolute top-0 right-0 p-8 opacity-5">
                  <Users size={120} />
               </div>
-              <h3 className="text-2xl font-black mb-4 tracking-tighter">Stay Connected</h3>
+              <h3 className="text-2xl font-display font-black mb-4 tracking-tighter">Stay Connected</h3>
               <p className="text-slate-400 text-sm leading-relaxed mb-8">Join our Whatsapp groups or follow us on social media for daily encouragement and live service links.</p>
               <div className="space-y-6">
                 <div className="flex items-center gap-4 group">
@@ -236,7 +236,7 @@ export const LandingPage = () => {
                <div className="w-12 h-12 bg-rose-50 rounded-2xl flex items-center justify-center mb-6">
                   <Heart size={24} className="text-rose-500" />
                </div>
-               <h3 className="font-black text-slate-900 text-xl mb-3 tracking-tighter">Prayer Wall</h3>
+               <h3 className="font-display font-black text-slate-900 text-xl mb-3 tracking-tighter">Prayer Wall</h3>
                <p className="text-slate-500 text-xs leading-relaxed mb-6 font-medium">
                   Submit your prayer requests and our ministerial team will stand in agreement with you before the throne of grace.
                </p>
@@ -253,7 +253,7 @@ export const LandingPage = () => {
          <div className="max-w-xl mx-auto space-y-8">
             <div className="flex items-center justify-center gap-3">
                <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center font-bold text-white">I</div>
-               <span className="text-lg font-black tracking-tighter text-white">IFC CHURCH</span>
+               <span className="text-lg font-display font-black tracking-tighter text-white">IFC CHURCH</span>
             </div>
             <p className="text-slate-500 text-xs uppercase tracking-[0.3em] font-bold">Kingdom Expansion • Spiritual Growth • Community Service</p>
             <div className="pt-8 border-t border-slate-800 text-[10px] text-slate-600 uppercase font-bold tracking-widest">

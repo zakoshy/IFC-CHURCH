@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { ai } from '../lib/gemini';
 import { 
   Users, 
   TrendingUp, 
@@ -11,9 +12,16 @@ import {
   UserPlus,
   Megaphone,
   Trash2,
-  History
+  History,
+  BookOpen,
+  Sparkles,
+  Send,
+  Share2,
+  Heart,
+  MessageCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import ReactMarkdown from 'react-markdown';
 import { 
   BarChart, 
   Bar, 
@@ -26,12 +34,17 @@ import {
   Area
 } from 'recharts';
 import { format, subDays, startOfWeek, endOfWeek } from 'date-fns';
+import { CounselingChat } from './CounselingChat';
+import { Profile } from '../types';
+import { checkLimit, incrementUsage } from '../lib/usage';
 
 interface Props {
   activeTab: string;
+  profile: Profile | null;
+  onTabChange: (tab: string) => void;
 }
 
-export function DashboardPastor({ activeTab }: Props) {
+export function DashboardPastor({ activeTab, profile, onTabChange }: Props) {
   const [stats, setStats] = useState({
     totalMembers: 0,
     attendanceToday: 0,
@@ -40,7 +53,14 @@ export function DashboardPastor({ activeTab }: Props) {
   });
   const [notifications, setNotifications] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [prayerRequests, setPrayerRequests] = useState<any[]>([]);
+  const [sermons, setSermons] = useState<any[]>([]);
   const [newAnnouncement, setNewAnnouncement] = useState({ title: '', content: '' });
+  const [sermonTopic, setSermonTopic] = useState('');
+  const [sermonPreview, setSermonPreview] = useState<string | null>(null);
+  const [generatingSermon, setGeneratingSermon] = useState(false);
+  const [sermonLimitReached, setSermonLimitReached] = useState(false);
+  const [sermonsRemaining, setSermonsRemaining] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Mock data for charts
@@ -56,12 +76,103 @@ export function DashboardPastor({ activeTab }: Props) {
   useEffect(() => {
     fetchStats();
     fetchAnnouncements();
-  }, [activeTab]);
+    if (activeTab === 'requests') fetchPrayerRequests();
+    if (activeTab === 'sermons') fetchSermons();
+    if (profile?.id) {
+       checkLimit(profile.id, 'sermon').then(res => {
+         setSermonsRemaining(res.remaining);
+         setSermonLimitReached(!res.allowed);
+       });
+    }
+  }, [activeTab, profile]);
 
   async function fetchAnnouncements() {
     const { data } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
     if (data) setAnnouncements(data);
   }
+
+  async function fetchPrayerRequests() {
+    const { data } = await supabase.from('prayer_requests')
+      .select('*, profiles(full_name)')
+      .order('created_at', { ascending: false });
+    if (data) setPrayerRequests(data);
+  }
+
+  async function fetchSermons() {
+    const { data } = await supabase.from('sermons').select('*').order('created_at', { ascending: false });
+    if (data) setSermons(data);
+  }
+
+  const handleGenerateSermon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sermonTopic.trim() || generatingSermon || sermonLimitReached || !profile) return;
+    
+    // Double check limit
+    const { allowed } = await checkLimit(profile.id, 'sermon');
+    if (!allowed) {
+      setSermonLimitReached(true);
+      return;
+    }
+
+    setGeneratingSermon(true);
+    setSermonPreview(null);
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [{
+          role: 'user',
+          parts: [{ text: `Generate a complete Christian sermon for a Kenyan audience based on this topic: ${sermonTopic}. 
+          The sermon should have:
+          1. A bold Title
+          2. Multiple Bible references
+          3. An Introduction, 3 main points with scriptural support, and a Conclusion with an altar call.
+          4. Use a tone of authority and love.
+          Format the output as clear Markdown text.` }]
+        }]
+      });
+
+      setSermonPreview(response.text);
+      await incrementUsage(profile.id, 'sermon');
+      const updated = await checkLimit(profile.id, 'sermon');
+      setSermonsRemaining(updated.remaining);
+      setSermonLimitReached(!updated.allowed);
+    } catch (err) {
+      console.error('Error generating sermon:', err);
+    } finally {
+      setGeneratingSermon(false);
+    }
+  };
+
+  const saveSermon = async (publish: boolean) => {
+    if (!sermonPreview) return;
+    
+    try {
+      const { error } = await supabase.from('sermons').insert([{
+        title: sermonTopic,
+        content: sermonPreview,
+        speaker: 'Admin/Pastor',
+        is_published: publish
+      }]);
+
+      if (!error) {
+        setSermonTopic('');
+        setSermonPreview(null);
+        fetchSermons();
+      }
+    } catch (err) {
+      console.error('Error saving sermon:', err);
+    }
+  };
+
+  const deleteSermon = async (id: string) => {
+    await supabase.from('sermons').delete().eq('id', id);
+    fetchSermons();
+  };
+
+  const toggleSermonPublish = async (id: string, currentStatus: boolean) => {
+    await supabase.from('sermons').update({ is_published: !currentStatus }).eq('id', id);
+    fetchSermons();
+  };
 
   const handleAddAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,6 +187,11 @@ export function DashboardPastor({ activeTab }: Props) {
   const deleteAnnouncement = async (id: string) => {
     await supabase.from('announcements').delete().eq('id', id);
     fetchAnnouncements();
+  };
+
+  const updatePrayerStatus = async (id: string, status: string) => {
+    await supabase.from('prayer_requests').update({ status }).eq('id', id);
+    fetchPrayerRequests();
   };
 
   async function fetchStats() {
@@ -101,8 +217,8 @@ export function DashboardPastor({ activeTab }: Props) {
     return (
       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
         <header>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Public Ministry Management</h1>
-          <p className="text-sm text-slate-500 mt-1">Update church announcements and landing page content for IFC CHURCH.</p>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Church Notifications & Updates</h1>
+          <p className="text-sm text-slate-500 mt-1">Manage system notifications and public announcements for IFC CHURCH.</p>
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -157,7 +273,7 @@ export function DashboardPastor({ activeTab }: Props) {
                        <div className="max-w-[85%]">
                          <h4 className="font-bold text-slate-900 text-sm leading-tight">{ann.title}</h4>
                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter mt-1">
-                           {ann.created_at ? format(new Date(ann.created_at), 'MMM d, yyyy') : 'Recent'}
+                            {ann.created_at ? format(new Date(ann.created_at), 'MMM d, yyyy') : 'Recent'}
                          </p>
                        </div>
                        <button 
@@ -186,11 +302,322 @@ export function DashboardPastor({ activeTab }: Props) {
     );
   }
 
-  if (activeTab !== 'dashboard') {
+  if (activeTab === 'requests') {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-        <Clock size={48} className="mb-4 opacity-20" />
-        <p className="text-lg">Feature {activeTab} is being implemented...</p>
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <header>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Prayer Wall Management</h1>
+          <p className="text-sm text-slate-500 mt-1">Review and pray for the requests submitted by the congregation.</p>
+        </header>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <AnimatePresence>
+            {prayerRequests.map((req) => (
+              <motion.div 
+                key={req.id}
+                layout
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-4"
+              >
+                <div className="flex justify-between items-start">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
+                    req.status === 'active' ? 'bg-amber-100 text-amber-700' : 
+                    req.status === 'prayed_for' ? 'bg-indigo-100 text-indigo-700' : 
+                    'bg-emerald-100 text-emerald-700'
+                  }`}>
+                    {req.status.replace('_', ' ')}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {req.created_at ? format(new Date(req.created_at), 'MMM d') : ''}
+                  </span>
+                </div>
+                <p className="text-sm text-slate-700 italic font-serif leading-relaxed line-clamp-4">"{req.request_text}"</p>
+                <div className="flex items-center justify-between mt-auto pt-4 border-t border-slate-50">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500 border border-slate-200">
+                      {req.profiles?.full_name?.[0] || 'A'}
+                    </div>
+                    <span className="text-xs font-semibold text-slate-600 truncate max-w-[100px]">
+                      {req.is_private ? 'Anonymous' : req.profiles?.full_name}
+                    </span>
+                  </div>
+                  <div className="flex gap-1">
+                    {req.status === 'active' && (
+                      <button 
+                        onClick={() => updatePrayerStatus(req.id, 'prayed_for')}
+                        className="text-[10px] font-bold text-indigo-600 hover:bg-indigo-50 px-2 py-1 rounded"
+                      >
+                        MARK PRAYED
+                      </button>
+                    )}
+                    {req.status !== 'resolved' && (
+                      <button 
+                         onClick={() => updatePrayerStatus(req.id, 'resolved')}
+                         className="text-[10px] font-bold text-emerald-600 hover:bg-emerald-50 px-2 py-1 rounded"
+                      >
+                        RESOLVE
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+          {prayerRequests.length === 0 && (
+            <div className="col-span-full py-20 flex flex-col items-center justify-center text-slate-300 opacity-50">
+              <History size={48} className="mb-4" />
+              <p className="font-bold uppercase tracking-widest text-sm">No prayer requests at the moment</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (activeTab === 'counseling') {
+    return (
+      <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500 h-full">
+        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Scripture Counselor</h1>
+            <p className="text-xs text-slate-500 mt-1 uppercase font-bold tracking-widest">Personal Guidance & Oversight</p>
+          </div>
+          <div className="flex items-center gap-2">
+             <div className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
+                System Active
+             </div>
+          </div>
+        </header>
+
+        <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-6 pb-2">
+          {/* Main Counseling Area */}
+          <div className="flex-1 flex flex-col bg-white rounded-2xl border border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden order-2 lg:order-1 min-h-[500px]">
+             <CounselingChat userId={profile?.id} isPastor={true} />
+          </div>
+
+          {/* Oversight Sidebar */}
+          <div className="lg:w-80 flex flex-col gap-6 order-1 lg:order-2 shrink-0">
+            {/* Pastoral Support Notice */}
+            <div className="bg-slate-900 rounded-2xl p-6 text-white relative overflow-hidden shadow-lg shadow-slate-200">
+               <div className="relative z-10">
+                  <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-emerald-500/20">
+                     <Heart size={20} className="text-white" />
+                  </div>
+                  <h4 className="font-bold text-lg mb-1 tracking-tight">Pastoral Support</h4>
+                  <p className="text-[11px] leading-relaxed text-slate-400 mb-4">
+                    Pastor, this chat is private. Use it for your own spiritual strength and to find wisdom for the challenges you face in ministry.
+                  </p>
+                  <div className="p-3 bg-white/5 rounded-xl border border-white/10 text-[10px] text-emerald-400 font-medium italic">
+                    "Cast all your anxiety on him because he cares for you." — 1 Pet 5:7
+                  </div>
+               </div>
+               <div className="absolute -right-4 -top-4 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl"></div>
+            </div>
+
+            {/* Member Monitoring */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
+              <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Member Crisis Alerts</h3>
+                <span className="bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold shadow-sm">2</span>
+              </div>
+              <div className="p-3 space-y-3 overflow-y-auto">
+                {[
+                  { id: '1', user: 'Anon #4210', distress: 'High', preview: 'I feel overwhelmed...' },
+                  { id: '2', user: 'Anon #4192', distress: 'Med', preview: 'Seeking scripture...' },
+                ].map(session => (
+                  <button key={session.id} className="w-full text-left p-3 rounded-xl border border-slate-50 hover:border-emerald-200 hover:bg-emerald-50/50 transition-all group">
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="text-xs font-bold text-slate-900">{session.user}</span>
+                      <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${session.distress === 'High' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}`}>
+                        {session.distress}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 truncate italic">"{session.preview}"</p>
+                  </button>
+                ))}
+              </div>
+              <div className="p-4 bg-slate-50 border-t border-slate-100 text-center">
+                 <button className="text-[10px] font-bold text-slate-400 hover:text-emerald-600 uppercase tracking-widest transition-colors">View All Flags</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (activeTab === 'sermons') {
+    return (
+      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight text-[32px]">Sermon Preparation & Library</h1>
+            <p className="text-sm text-slate-500 mt-1">Generate AI-powered sermons, share them with the congregation, and manage your teaching history.</p>
+          </div>
+        </header>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+           {/* Generator Sidebar */}
+           <div className="lg:col-span-1 space-y-6">
+              <div className="bg-slate-900 rounded-2xl p-6 text-white shadow-xl shadow-slate-200">
+                 <div className="w-12 h-12 bg-emerald-500 rounded-xl flex items-center justify-center mb-6 shadow-lg shadow-emerald-500/20">
+                    <Sparkles size={24} />
+                 </div>
+                 <h3 className="text-xl font-bold mb-2">AI Sermon Generator</h3>
+                 <p className="text-slate-400 text-xs mb-6 leading-relaxed">Describe the topic, theme, or Bible verse you want to preach about. Our AI will craft a deep, scriptural outline for you.</p>
+                                 <form onSubmit={handleGenerateSermon} className="space-y-4">
+                    <div className="space-y-1.5">
+                       <label className="text-[10px] uppercase font-black text-slate-500 tracking-widest ml-1">Preaching Topic</label>
+                       <input 
+                         type="text" 
+                         value={sermonTopic}
+                         onChange={e => setSermonTopic(e.target.value)}
+                         placeholder="e.g. The Power of Forgiveness"
+                         disabled={sermonLimitReached}
+                         className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none placeholder:text-slate-600 transition-all font-medium"
+                       />
+                    </div>
+                    <button 
+                      type="submit" 
+                      disabled={generatingSermon || !sermonTopic.trim() || sermonLimitReached}
+                      className={`w-full font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg ${
+                        sermonLimitReached 
+                        ? 'bg-slate-800 text-slate-600 cursor-not-allowed'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/20'
+                      }`}
+                    >
+                      {generatingSermon ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                          Generating Word...
+                        </>
+                      ) : sermonLimitReached ? (
+                        'Daily Limit Reached'
+                      ) : (
+                        <>
+                          <Send size={18} />
+                          Generate Sermon
+                        </>
+                      )}
+                    </button>
+                    {sermonsRemaining !== null && !sermonLimitReached && (
+                      <p className="text-[9px] text-center text-slate-400 font-bold uppercase tracking-widest mt-2 bg-white/5 py-1 rounded">
+                        {sermonsRemaining} generations remaining today
+                      </p>
+                    )}
+                 </form>
+              </div>
+
+              <AnimatePresence>
+                {sermonPreview && (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className="bg-emerald-50 rounded-2xl border-2 border-emerald-200 p-6 shadow-xl"
+                  >
+                    <div className="flex items-center gap-2 mb-4">
+                      <Sparkles className="text-emerald-600" size={20} />
+                      <h4 className="text-sm font-bold text-slate-900">Sermon Preview</h4>
+                    </div>
+                    <div className="bg-white rounded-xl p-4 mb-6 max-h-60 overflow-y-auto border border-emerald-100 prose prose-xs">
+                      <ReactMarkdown>{sermonPreview}</ReactMarkdown>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button 
+                        onClick={() => saveSermon(false)}
+                        className="bg-white border border-emerald-200 text-emerald-700 font-bold py-2.5 rounded-xl text-xs hover:bg-emerald-50 transition-all"
+                      >
+                        Keep Draft
+                      </button>
+                      <button 
+                        onClick={() => saveSermon(true)}
+                        className="bg-emerald-600 text-white font-bold py-2.5 rounded-xl text-xs hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-200"
+                      >
+                        <Share2 size={14} />
+                        Share Now
+                      </button>
+                    </div>
+                    <button 
+                      onClick={() => setSermonPreview(null)}
+                      className="w-full mt-3 text-[10px] font-bold text-slate-400 hover:text-red-500 uppercase tracking-widest py-1"
+                    >
+                      Discard Draft
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Pastoral Wisdom</h4>
+                 <p className="text-xs text-slate-600 leading-relaxed italic border-l-2 border-emerald-500 pl-4 py-1">
+                   "He who speaks should do it as one speaking the very words of God." — 1 Peter 4:11
+                 </p>
+              </div>
+           </div>
+
+           {/* Library Area */}
+           <div className="lg:col-span-2 space-y-4">
+              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-2">
+                 <BookOpen size={14} />
+                 Generated Sermons
+              </h3>
+              
+              <div className="grid grid-cols-1 gap-4">
+                <AnimatePresence mode="popLayout">
+                   {sermons.map((s) => (
+                     <motion.div 
+                        key={s.id}
+                        layout
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm hover:shadow-md transition-shadow group"
+                     >
+                        <div className="flex justify-between items-start mb-4">
+                           <div className="flex-1">
+                              <h4 className="text-lg font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">{s.title}</h4>
+                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">
+                                {format(new Date(s.created_at), 'MMMM d, yyyy')} • {s.speaker}
+                              </p>
+                           </div>
+                           <div className="flex gap-2">
+                              <button 
+                                onClick={() => toggleSermonPublish(s.id, s.is_published)}
+                                className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border ${
+                                  s.is_published 
+                                  ? 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100' 
+                                  : 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-slate-100 hover:text-slate-600'
+                                }`}
+                              >
+                                {s.is_published ? 'Published' : 'Share to Church'}
+                              </button>
+                              <button 
+                                onClick={() => deleteSermon(s.id)}
+                                className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                           </div>
+                        </div>
+                        <div className="prose prose-sm max-w-none text-slate-600 line-clamp-3 overflow-hidden">
+                           <ReactMarkdown>{s.content}</ReactMarkdown>
+                        </div>
+                        <button className="mt-4 text-[10px] font-bold text-emerald-600 uppercase tracking-widest hover:underline">Read Full Sermon</button>
+                     </motion.div>
+                   ))}
+                </AnimatePresence>
+                {sermons.length === 0 && !generatingSermon && (
+                  <div className="py-20 bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center text-slate-300">
+                     <BookOpen size={48} className="mb-4 opacity-20" />
+                     <p className="text-xs font-black uppercase tracking-widest">Library is empty. Generate your first sermon.</p>
+                  </div>
+                )}
+              </div>
+           </div>
+        </div>
       </div>
     );
   }
@@ -311,32 +738,53 @@ export function DashboardPastor({ activeTab }: Props) {
         </div>
 
         {/* AI Counselor Flags */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
-          <div className="p-4 border-b border-slate-100">
-            <h2 className="font-bold text-slate-800">AI Counselor Flags</h2>
-            <p className="text-[11px] text-slate-500 mt-1 uppercase font-bold tracking-widest"> Pastoral attention required</p>
-          </div>
-          <div className="p-4 flex-1 space-y-4">
-            {[
-              { type: 'DISTRESS', color: 'red', text: '"I feel overwhelmed and lost, I\'m not sure if God hears me anymore..."', meta: '10m ago', id: 'Anon #4210' },
-              { type: 'GRIEF', color: 'amber', text: '"Seeking scripture for comfort after sudden family loss..."', meta: '1h ago', id: 'Anon #4192' },
-            ].map((item, idx) => (
-              <div key={idx} className="p-3 rounded-lg border border-slate-100 space-y-2 hover:border-slate-200 transition-colors">
-                <div className="flex justify-between items-start">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 bg-${item.color}-100 text-${item.color}-700 rounded uppercase`}>{item.type}</span>
-                  <span className="text-[10px] text-slate-400 font-mono">{item.meta}</span>
-                </div>
-                <p className="text-xs italic text-slate-600 leading-relaxed font-serif">{item.text}</p>
-                <div className="flex items-center gap-2 pt-2 border-t border-slate-50">
-                  <div className="w-5 h-5 rounded-full bg-slate-200"></div>
-                  <span className="text-[10px] font-semibold text-slate-700">{item.id}</span>
-                  <button className="ml-auto text-emerald-600 text-[10px] font-bold hover:underline">VIEW LOG</button>
-                </div>
-              </div>
-            ))}
-            <button className="w-full py-2 bg-slate-50 border border-slate-200 text-slate-600 text-xs font-bold rounded-lg hover:bg-slate-100 transition-colors">
-              Review All Flagged Chats
+        <div className="flex flex-col gap-6">
+          <div className="bg-slate-900 rounded-xl p-6 text-white shadow-lg shadow-slate-200">
+            <div className="w-10 h-10 bg-emerald-500 rounded-lg flex items-center justify-center mb-4">
+              <MessageCircle size={20} />
+            </div>
+            <h3 className="font-bold text-lg mb-2">Scripture Counseling</h3>
+            <p className="text-slate-400 text-xs leading-relaxed mb-6">
+              Access your private pastoral AI assistant for scripture study, counseling preparation, or personal spiritual support.
+            </p>
+            <button 
+              onClick={() => onTabChange('counseling')}
+              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-emerald-900/20"
+            >
+              Start Consultation
             </button>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden flex-1">
+            <div className="p-4 border-b border-slate-100">
+              <h2 className="font-bold text-slate-800">AI Counselor Flags</h2>
+              <p className="text-[11px] text-slate-500 mt-1 uppercase font-bold tracking-widest"> Pastoral attention required</p>
+            </div>
+            <div className="p-4 space-y-4">
+              {[
+                { type: 'DISTRESS', color: 'red', text: '"I feel overwhelmed and lost, I\'m not sure if God hears me anymore..."', meta: '10m ago', id: 'Anon #4210' },
+                { type: 'GRIEF', color: 'amber', text: '"Seeking scripture for comfort after sudden family loss..."', meta: '1h ago', id: 'Anon #4192' },
+              ].map((item, idx) => (
+                <div key={idx} className="p-3 rounded-lg border border-slate-100 space-y-2 hover:border-slate-200 transition-colors">
+                  <div className="flex justify-between items-start">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 bg-${item.color}-100 text-${item.color}-700 rounded uppercase`}>{item.type}</span>
+                    <span className="text-[10px] text-slate-400 font-mono">{item.meta}</span>
+                  </div>
+                  <p className="text-xs italic text-slate-600 leading-relaxed font-serif">{item.text}</p>
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-50">
+                    <div className="w-5 h-5 rounded-full bg-slate-200"></div>
+                    <span className="text-[10px] font-semibold text-slate-700">{item.id}</span>
+                    <button className="ml-auto text-emerald-600 text-[10px] font-bold hover:underline">VIEW LOG</button>
+                  </div>
+                </div>
+              ))}
+              <button 
+                onClick={() => onTabChange('counseling')}
+                className="w-full py-2 bg-slate-50 border border-slate-200 text-slate-600 text-xs font-bold rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                Review All Flagged Chats
+              </button>
+            </div>
           </div>
         </div>
       </div>

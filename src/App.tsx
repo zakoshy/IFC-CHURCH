@@ -89,11 +89,11 @@ export default function App() {
   const role = profile?.role || 'member';
 
   const menuItems = role === 'pastor' ? [
-    { id: 'landing', label: 'View Landing Page', icon: Home },
-    { id: 'manage_landing', label: 'Manage Landing', icon: Megaphone },
     { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
+    { id: 'manage_landing', label: 'Notifications', icon: Bell },
     { id: 'members', label: 'Members', icon: Users },
     { id: 'attendance', label: 'Attendance', icon: Calendar },
+    { id: 'counseling', label: 'Scripture Counselor', icon: MessageCircle },
     { id: 'finances', label: 'Giving (M-Pesa)', icon: HandCoins },
     { id: 'requests', label: 'Prayer Wall', icon: Heart },
     { id: 'sermons', label: 'Sermons', icon: BookOpen },
@@ -101,7 +101,7 @@ export default function App() {
   ] : [
     { id: 'landing', label: 'Landing Page', icon: Home },
     { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
-    { id: 'counseling', label: 'AI Counsel', icon: MessageCircle },
+    { id: 'counseling', label: 'Scripture Counselor', icon: MessageCircle },
     { id: 'give', label: 'Give via M-Pesa', icon: HandCoins },
     { id: 'attendance', label: 'My Record', icon: Calendar },
     { id: 'requests', label: 'Prayer Requests', icon: Heart },
@@ -213,7 +213,7 @@ export default function App() {
           <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-100 flex items-center justify-between px-8 md:px-12 z-20 sticky top-0 shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center font-bold text-white shadow-lg shadow-emerald-600/20">I</div>
-              <span className="text-xl font-black tracking-tighter text-slate-900">IFC CHURCH</span>
+              <span className="text-xl font-display font-black tracking-tighter text-slate-900">IFC CHURCH</span>
             </div>
             <div className="hidden md:flex items-center gap-8 text-sm font-bold uppercase tracking-widest text-slate-500">
                <button onClick={() => setActiveTab('landing')} className="hover:text-emerald-600 transition-colors cursor-pointer">Home</button>
@@ -254,9 +254,9 @@ export default function App() {
             ) : !session ? (
               <LandingPage />
             ) : role === 'pastor' ? (
-              <DashboardPastor activeTab={activeTab} />
+              <DashboardPastor activeTab={activeTab} profile={profile} onTabChange={setActiveTab} />
             ) : (
-              <DashboardMember activeTab={activeTab} profile={profile} />
+              <DashboardMember activeTab={activeTab} profile={profile} onTabChange={setActiveTab} />
             )}
           </div>
         </div>

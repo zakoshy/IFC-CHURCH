@@ -1,15 +1,23 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ai, SCRIPTURE_SYSTEM_PROMPT } from '../lib/gemini';
 import { CounselingResponse } from '../types';
-import { Send, Bot, User, Sparkles, MessageCircle, AlertTriangle, Book, History } from 'lucide-react';
+import { Send, Bot, User, Sparkles, MessageCircle, AlertTriangle, Book, History, Info, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
+import { checkLimit, incrementUsage } from '../lib/usage';
 
-export function CounselingChat() {
+interface Props {
+  userId?: string;
+  isPastor?: boolean;
+}
+
+export function CounselingChat({ userId, isPastor }: Props) {
   const [messages, setMessages] = useState<{ role: 'user' | 'ai'; content: string; verses?: string[] }[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [sessionStarted, setSessionStarted] = useState(false);
+  const [sessionStarted, setSessionStarted] = useState(true); // Default to true to show chat immediately
+  const [remaining, setRemaining] = useState<number | null>(null);
+  const [limitReached, setLimitReached] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -20,9 +28,37 @@ export function CounselingChat() {
     scrollToBottom();
   }, [messages]);
 
+  // Initial welcome message
+  useEffect(() => {
+    if (messages.length === 0) {
+      setMessages([{
+        role: 'ai',
+        content: isPastor 
+          ? "Welcome back, Pastor. How can I assist you in your ministry or personal spiritual journey today? I am here to provide scriptural wisdom and support."
+          : "Hello. I am your Scripture Counselor. I am here to listen and share wisdom from the Word of God with you. What is on your heart today?"
+      }]);
+    }
+  }, [isPastor]);
+
+  useEffect(() => {
+    if (userId) {
+      checkLimit(userId, 'chat').then(res => {
+        setRemaining(res.remaining);
+        setLimitReached(!res.allowed);
+      });
+    }
+  }, [userId]);
+
   const handleSend = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!input.trim() || loading) return;
+    if (!input.trim() || loading || limitReached || !userId) return;
+
+    // Double check limit before sending
+    const { allowed } = await checkLimit(userId, 'chat');
+    if (!allowed) {
+      setLimitReached(true);
+      return;
+    }
 
     const userMessage = input.trim();
     setInput('');
@@ -49,6 +85,11 @@ export function CounselingChat() {
         verses: data.bible_verses
       }]);
 
+      await incrementUsage(userId, 'chat');
+      const updated = await checkLimit(userId, 'chat');
+      setRemaining(updated.remaining);
+      setLimitReached(!updated.allowed);
+
       // If category is serious, we could show a notice to the user
       if (data.category === 'serious_emotional_distress') {
         setMessages(prev => [...prev, { 
@@ -57,8 +98,8 @@ export function CounselingChat() {
         }]);
       }
     } catch (err) {
-      console.error(err);
-      setMessages(prev => [...prev, { role: 'ai', content: "I'm sorry, I encountered an error. Let's pray together instead." }]);
+      console.error('AI Error:', err);
+      setMessages(prev => [...prev, { role: 'ai', content: "My apologies, I am having trouble connecting to the Word right now. Please try again or pray for a moment while I reconnect." }]);
     } finally {
       setLoading(false);
     }
@@ -66,14 +107,14 @@ export function CounselingChat() {
 
   if (!sessionStarted) {
     return (
-      <div className="max-w-2xl mx-auto h-[70vh] flex flex-col items-center justify-center text-center px-4">
+      <div className="w-full h-full flex flex-col items-center justify-center text-center px-4 py-12">
         <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 mb-6 shadow-sm">
           <MessageCircle size={40} />
         </div>
         <h2 className="text-3xl font-bold text-slate-900 mb-2">Scripture Counseling</h2>
         <p className="text-slate-500 mb-8 max-w-md">Seek spiritual guidance, find peace in the Word, and share what's on your heart in a private, compassionate space.</p>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-2xl mb-8">
           <div className="p-4 bg-white border border-slate-100 rounded-2xl text-left shadow-sm">
             <Book size={18} className="text-indigo-600 mb-2" />
             <p className="text-sm font-bold text-slate-800">Bible Wisdom</p>
@@ -97,7 +138,7 @@ export function CounselingChat() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-10rem)] bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <div className="flex flex-col h-full bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden min-h-[500px]">
       {/* Chat Header */}
       <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white">
         <div className="flex items-center gap-3">
@@ -183,18 +224,33 @@ export function CounselingChat() {
             type="text" 
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            disabled={loading}
-            placeholder="Search scripture or share your heart..." 
+            disabled={loading || limitReached}
+            placeholder={limitReached ? "Daily threshold met..." : "Search scripture or share your heart..."} 
             className="w-full pl-4 pr-12 py-3 bg-slate-100 border-none rounded-full text-xs font-medium focus:ring-2 focus:ring-slate-900 outline-none transition-all disabled:opacity-50 placeholder:text-slate-400"
           />
           <button 
             type="submit"
-            disabled={!input.trim() || loading}
-            className="absolute right-1 top-1/2 -translate-y-1/2 w-8 h-8 bg-slate-900 text-white rounded-full flex items-center justify-center hover:bg-black transition-colors disabled:bg-slate-300 shadow-lg"
+            disabled={!input.trim() || loading || limitReached}
+            className={`absolute right-1 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center transition-all shadow-lg ${
+              limitReached ? 'bg-slate-200 text-slate-400' : 'bg-slate-900 text-white hover:bg-black'
+            }`}
           >
-            <Send size={14} />
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
           </button>
         </form>
+        <div className="flex items-center justify-between mt-2 px-4">
+          {remaining !== null && (
+            <p className={`text-[9px] font-bold uppercase tracking-widest ${remaining < 5 ? 'text-amber-600' : 'text-slate-400'}`}>
+              {limitReached ? 'Threshold Reached (20/20)' : `${remaining} messages remaining today`}
+            </p>
+          )}
+          {limitReached && (
+            <div className="flex items-center gap-1 text-[9px] font-bold text-indigo-600 uppercase tracking-widest">
+              <Info size={10} />
+              Seek direct pastoral support
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
