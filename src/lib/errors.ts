@@ -40,6 +40,10 @@ export function handleSupabaseError(error: any): ChurchError {
     return new ChurchError('PERMISSION_DENIED', 'You do not have permission to perform this action.', error);
   }
 
+  if (error.code === 'PGRST204') {
+    return new ChurchError('SCHEMA_CACHE_ERROR', 'Database structure mismatch. Please refresh your browser to synchronize.', error);
+  }
+
   return new ChurchError(
     error.code || 'UNKNOWN_ERROR',
     error.message || 'An unexpected error occurred.',
@@ -57,6 +61,8 @@ export function getFriendlyMessage(error: any): string {
         return 'Access denied. Please check if you have the right permissions or are signed in.';
       case 'ALREADY_EXISTS':
         return 'It looks like this information is already in the system.';
+      case 'SCHEMA_CACHE_ERROR':
+        return 'The system detected a database update. To see the new features, please REFRESH your browser page.';
       case 'rate-limit':
         return 'Too many requests. Please take a small break and try again in a minute.';
       default:

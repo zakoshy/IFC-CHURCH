@@ -14,6 +14,22 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
+-- Ensure columns exist if table was created in an earlier session
+DO $$ 
+BEGIN 
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='profiles' AND column_name='phone_number') THEN
+    ALTER TABLE public.profiles ADD COLUMN phone_number TEXT UNIQUE;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='profiles' AND column_name='last_attendance_at') THEN
+    ALTER TABLE public.profiles ADD COLUMN last_attendance_at TIMESTAMPTZ;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='profiles' AND column_name='avatar_url') THEN
+    ALTER TABLE public.profiles ADD COLUMN avatar_url TEXT;
+  END IF;
+END $$;
+
 -- 2. ATTENDANCE
 CREATE TABLE IF NOT EXISTS public.attendance (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -100,11 +116,23 @@ CREATE TABLE IF NOT EXISTS public.sermons (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Ensure column exists if table was created in an earlier session
+-- Ensure columns exist if table was created in an earlier session
 DO $$ 
 BEGIN 
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='sermons' AND column_name='is_published') THEN
     ALTER TABLE public.sermons ADD COLUMN is_published BOOLEAN DEFAULT FALSE;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='sermons' AND column_name='content') THEN
+    ALTER TABLE public.sermons ADD COLUMN content TEXT;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='sermons' AND column_name='summary') THEN
+    ALTER TABLE public.sermons ADD COLUMN summary TEXT;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='sermons' AND column_name='speaker') THEN
+    ALTER TABLE public.sermons ADD COLUMN speaker TEXT;
   END IF;
 END $$;
 
@@ -117,6 +145,22 @@ CREATE TABLE IF NOT EXISTS public.announcements (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Ensure columns exist if table was created in an earlier session
+DO $$ 
+BEGIN 
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='announcements' AND column_name='content') THEN
+    ALTER TABLE public.announcements ADD COLUMN content TEXT;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='announcements' AND column_name='image_url') THEN
+    ALTER TABLE public.announcements ADD COLUMN image_url TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='announcements' AND column_name='is_active') THEN
+    ALTER TABLE public.announcements ADD COLUMN is_active BOOLEAN DEFAULT TRUE;
+  END IF;
+END $$;
 
 ALTER TABLE public.sermons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.announcements ENABLE ROW LEVEL SECURITY;

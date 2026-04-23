@@ -19,7 +19,8 @@ import {
   Share2,
   Heart,
   MessageCircle,
-  Search
+  Search,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
@@ -64,7 +65,9 @@ export function DashboardPastor({ activeTab, profile, onTabChange }: Props) {
   const [generatingSermon, setGeneratingSermon] = useState(false);
   const [sermonLimitReached, setSermonLimitReached] = useState(false);
   const [sermonsRemaining, setSermonsRemaining] = useState<number | null>(null);
+  const [selectedSermon, setSelectedSermon] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [schemaError, setSchemaError] = useState(false);
 
   // Mock data for charts
   const attendanceData = [
@@ -110,8 +113,21 @@ export function DashboardPastor({ activeTab, profile, onTabChange }: Props) {
   }
 
   async function fetchSermons() {
-    const { data } = await supabase.from('sermons').select('*').order('created_at', { ascending: false });
-    if (data) setSermons(data);
+    try {
+      const { data, error } = await supabase.from('sermons').select('*').order('created_at', { ascending: false });
+      if (error) {
+        if (error.code === 'PGRST204') {
+          setSchemaError(true);
+        }
+        throw error;
+      }
+      if (data) {
+        setSermons(data);
+        setSchemaError(false);
+      }
+    } catch (err) {
+      console.error('Error fetching sermons:', err);
+    }
   }
 
   const handleGenerateSermon = async (e: React.FormEvent) => {
@@ -545,6 +561,86 @@ export function DashboardPastor({ activeTab, profile, onTabChange }: Props) {
           </div>
         </header>
 
+        {schemaError && (
+          <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-start gap-3">
+            <AlertCircle className="text-amber-600 shrink-0 mt-0.5" size={18} />
+            <div>
+              <h4 className="text-sm font-bold text-amber-900">Database Schema Sync Required</h4>
+              <p className="text-xs text-amber-700 mt-1">
+                It looks like your database was recently updated. If you see a "Could not find column" error, please 
+                <span className="font-bold"> Refresh your browser</span> or wait a minute for the cache to update.
+              </p>
+              <button 
+                onClick={fetchSermons}
+                className="mt-2 text-[10px] font-bold text-amber-800 uppercase tracking-widest bg-amber-200/50 px-2 py-1 rounded hover:bg-amber-200 transition-colors"
+              >
+                Retry Connection
+              </button>
+            </div>
+          </div>
+        )}
+
+        {selectedSermon && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              className="bg-white w-full max-w-4xl max-h-[90vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col"
+            >
+              <div className="p-6 border-b border-slate-100 flex justify-between items-start bg-slate-50">
+                <div>
+                  <h2 className="text-2xl font-black text-slate-900 tracking-tight leading-tight">{selectedSermon.title}</h2>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded uppercase tracking-wider">
+                      {selectedSermon.speaker || 'Pastor'}
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      {format(new Date(selectedSermon.created_at), 'MMMM d, yyyy')}
+                    </span>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setSelectedSermon(null)}
+                  className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-8 prose prose-slate max-w-none prose-headings:font-black prose-p:leading-relaxed prose-li:italic">
+                <ReactMarkdown>{selectedSermon.content}</ReactMarkdown>
+              </div>
+              <div className="p-6 border-t border-slate-100 bg-white flex justify-between items-center">
+                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                  End of Sermon Transcript
+                </div>
+                <div className="flex gap-2">
+                   <button 
+                    onClick={() => {
+                      const text = `# ${selectedSermon.title}\n\n${selectedSermon.content}`;
+                      navigator.clipboard.writeText(text);
+                      alert('Sermon copied to clipboard!');
+                    }}
+                    className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all flex items-center gap-2"
+                  >
+                    <BookOpen size={14} />
+                    Copy Text
+                  </button>
+                  <button 
+                    onClick={() => setSelectedSermon(null)}
+                    className="px-6 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 transition-all"
+                  >
+                    Done Reading
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
            {/* Generator Sidebar */}
            <div className="lg:col-span-1 space-y-6">
@@ -597,46 +693,6 @@ export function DashboardPastor({ activeTab, profile, onTabChange }: Props) {
                  </form>
               </div>
 
-              <AnimatePresence>
-                {sermonPreview && (
-                  <motion.div 
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    className="bg-emerald-50 rounded-2xl border-2 border-emerald-200 p-6 shadow-xl"
-                  >
-                    <div className="flex items-center gap-2 mb-4">
-                      <Sparkles className="text-emerald-600" size={20} />
-                      <h4 className="text-sm font-bold text-slate-900">Sermon Preview</h4>
-                    </div>
-                    <div className="bg-white rounded-xl p-4 mb-6 max-h-60 overflow-y-auto border border-emerald-100 prose prose-xs">
-                      <ReactMarkdown>{sermonPreview}</ReactMarkdown>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button 
-                        onClick={() => saveSermon(false)}
-                        className="bg-white border border-emerald-200 text-emerald-700 font-bold py-2.5 rounded-xl text-xs hover:bg-emerald-50 transition-all"
-                      >
-                        Save
-                      </button>
-                      <button 
-                        onClick={() => saveSermon(true)}
-                        className="bg-emerald-600 text-white font-bold py-2.5 rounded-xl text-xs hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-200"
-                      >
-                        <Share2 size={14} />
-                        Share Now
-                      </button>
-                    </div>
-                    <button 
-                      onClick={() => setSermonPreview(null)}
-                      className="w-full mt-3 text-[10px] font-bold text-slate-400 hover:text-red-500 uppercase tracking-widest py-1"
-                    >
-                      Discard Draft
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
               <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Pastoral Wisdom</h4>
                  <p className="text-xs text-slate-600 leading-relaxed italic border-l-2 border-emerald-500 pl-4 py-1">
@@ -646,10 +702,69 @@ export function DashboardPastor({ activeTab, profile, onTabChange }: Props) {
            </div>
 
            {/* Library Area */}
-           <div className="lg:col-span-2 space-y-4">
+           <div className="lg:col-span-2 space-y-6">
+              <AnimatePresence>
+                {sermonPreview && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 1, y: -20 }}
+                    className="bg-emerald-50 rounded-3xl border-2 border-emerald-200 p-8 shadow-2xl relative overflow-hidden mb-4"
+                  >
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+                           <Sparkles size={20} />
+                        </div>
+                        <div>
+                           <h4 className="text-lg font-black text-slate-900 leading-tight">Draft Review</h4>
+                           <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-widest">Enhanced Reading Layout</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                         <span className="text-[10px] font-black text-emerald-600 animate-pulse bg-white/50 px-3 py-1.5 rounded-full border border-emerald-100 uppercase tracking-widest">Divine Inspiration</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-2xl p-8 mb-8 max-h-[600px] overflow-y-auto border border-emerald-100 prose prose-slate max-w-none shadow-inner font-serif leading-relaxed text-lg">
+                      <ReactMarkdown>{sermonPreview}</ReactMarkdown>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-center gap-4 border-t border-emerald-100 pt-6">
+                      <div className="flex gap-3 w-full sm:w-auto">
+                        <button 
+                          onClick={() => saveSermon(false)}
+                          className="flex-1 sm:flex-none bg-white border border-slate-200 text-slate-700 font-bold py-3.5 px-8 rounded-xl text-sm hover:bg-slate-50 transition-all shadow-sm active:scale-95"
+                        >
+                          Save Draft
+                        </button>
+                        <button 
+                          onClick={() => saveSermon(true)}
+                          className="flex-1 sm:flex-none bg-emerald-600 text-white font-bold py-3.5 px-8 rounded-xl text-sm hover:bg-emerald-500 transition-all flex items-center justify-center gap-2 shadow-xl shadow-emerald-200 active:scale-95"
+                        >
+                          <Share2 size={18} />
+                          Share Now
+                        </button>
+                      </div>
+                      <button 
+                        onClick={() => setSermonPreview(null)}
+                        className="text-[11px] font-bold text-slate-400 hover:text-red-500 uppercase tracking-widest py-2 px-4 transition-colors flex items-center gap-2 ml-auto"
+                      >
+                        <Trash2 size={14} />
+                        Discard Output
+                      </button>
+                    </div>
+                    
+                    <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                       <Megaphone size={120} className="text-emerald-900 transform -rotate-12" />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              
               <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-2">
                  <BookOpen size={14} />
-                 Generated Sermons
+                 Sermon Repository
               </h3>
               
               <div className="grid grid-cols-1 gap-4">
@@ -692,7 +807,13 @@ export function DashboardPastor({ activeTab, profile, onTabChange }: Props) {
                         <div className="prose prose-sm max-w-none text-slate-600 line-clamp-3 overflow-hidden">
                            <ReactMarkdown>{s.content}</ReactMarkdown>
                         </div>
-                        <button className="mt-4 text-[10px] font-bold text-emerald-600 uppercase tracking-widest hover:underline">Read Full Sermon</button>
+                        <button 
+                          onClick={() => setSelectedSermon(s)}
+                          className="mt-4 text-[10px] font-bold text-emerald-600 uppercase tracking-widest hover:bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100 transition-colors flex items-center gap-1.5 w-fit"
+                        >
+                          <BookOpen size={12} />
+                          Read Full Sermon
+                        </button>
                      </motion.div>
                    ))}
                 </AnimatePresence>
