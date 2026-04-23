@@ -32,6 +32,13 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeTab, setActiveTab] = useState('landing');
   const [showAuth, setShowAuth] = useState(false);
+  const [badgeCount, setBadgeCount] = useState(4);
+
+  useEffect(() => {
+    if (activeTab === 'counseling' && badgeCount > 0) {
+      setBadgeCount(0);
+    }
+  }, [activeTab, badgeCount]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -149,8 +156,8 @@ export default function App() {
                 >
                   <item.icon className={`w-4 h-4 flex-shrink-0 ${activeTab === item.id ? 'text-emerald-400' : ''}`} />
                   {item.label}
-                  {item.id === 'counseling' && (
-                     <span className="ml-auto bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">4</span>
+                  {item.id === 'counseling' && badgeCount > 0 && (
+                     <span className="ml-auto bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{badgeCount}</span>
                   )}
                 </button>
               ))}

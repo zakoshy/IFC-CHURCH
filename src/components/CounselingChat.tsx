@@ -181,7 +181,7 @@ export function CounselingChat({ userId, isPastor }: Props) {
             <div className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center shadow-sm ${
               msg.role === 'user' ? 'bg-white border border-slate-100 text-slate-600' : 'bg-slate-900 text-emerald-400'
             }`}>
-              {msg.role === 'user' ? <User size={14} /> : <Bot size={14} />}
+              {msg.role === 'user' ? <User size={14} /> : <Book size={14} />}
             </div>
             <div className={`max-w-[80%] space-y-2 ${msg.role === 'user' ? 'text-right' : ''}`}>
               <div className={`inline-block px-4 py-2.5 rounded-2xl text-[13px] leading-relaxed shadow-sm ${
@@ -205,7 +205,7 @@ export function CounselingChat({ userId, isPastor }: Props) {
         {loading && (
           <div className="flex gap-3">
             <div className="w-8 h-8 rounded-lg bg-slate-900 text-emerald-400 flex items-center justify-center">
-              <Bot size={14} />
+              <Book size={14} />
             </div>
             <div className="bg-white border border-slate-100 px-4 py-2.5 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-1.5">
               <div className="w-1 h-1 bg-emerald-500 rounded-full animate-bounce"></div>
