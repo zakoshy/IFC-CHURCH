@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { VerseCarousel } from './VerseCarousel';
 import { 
   BookOpen, 
@@ -12,7 +12,8 @@ import {
   Sparkles,
   History,
   Users,
-  PlayCircle
+  PlayCircle,
+  X
 } from 'lucide-react';
 
 interface Announcement {
@@ -23,9 +24,16 @@ interface Announcement {
   created_at: string;
 }
 
-export const LandingPage = () => {
+interface LandingPageProps {
+  onJoin?: () => void;
+  onSubmitRequest?: () => void;
+  onWatchSermons?: () => void;
+}
+
+export const LandingPage = ({ onJoin, onSubmitRequest, onWatchSermons }: LandingPageProps) => {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
 
   useEffect(() => {
     fetchAnnouncements();
@@ -72,10 +80,16 @@ export const LandingPage = () => {
             </p>
 
             <div className="flex flex-wrap gap-5">
-              <button className="bg-emerald-600 hover:bg-emerald-500 text-white px-10 py-4 rounded-full font-black text-xs uppercase tracking-widest transition-all shadow-2xl shadow-emerald-600/30 flex items-center gap-3 active:scale-95">
+              <button 
+                onClick={onJoin}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white px-10 py-4 rounded-full font-black text-xs uppercase tracking-widest transition-all shadow-2xl shadow-emerald-600/30 flex items-center gap-3 active:scale-95"
+              >
                 Join our family <ArrowRight size={18} />
               </button>
-              <button className="bg-white/5 hover:bg-white/10 text-white border border-white/10 px-10 py-4 rounded-full font-black text-xs uppercase tracking-widest transition-all backdrop-blur-sm">
+              <button 
+                onClick={onWatchSermons}
+                className="bg-white/5 hover:bg-white/10 text-white border border-white/10 px-10 py-4 rounded-full font-black text-xs uppercase tracking-widest transition-all backdrop-blur-sm"
+              >
                 Watch Sermons
               </button>
             </div>
@@ -188,7 +202,10 @@ export const LandingPage = () => {
                       <h3 className="text-xl font-display font-black text-slate-900 mb-3 line-clamp-2 leading-tight group-hover:text-emerald-600 transition-colors">{ann.title}</h3>
                       <p className="text-slate-500 text-sm line-clamp-3 leading-relaxed mb-6 font-medium italic">"{ann.content}"</p>
                       <div className="mt-auto pt-6 border-t border-slate-50">
-                        <button className="text-slate-900 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2 group-hover:gap-3 transition-all">
+                        <button 
+                          onClick={() => setSelectedAnnouncement(ann)}
+                          className="text-slate-900 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2 group-hover:gap-3 transition-all"
+                        >
                           Read Details <ArrowRight size={14} className="text-emerald-500" />
                         </button>
                       </div>
@@ -240,7 +257,10 @@ export const LandingPage = () => {
                <p className="text-slate-500 text-xs leading-relaxed mb-6 font-medium">
                   Submit your prayer requests and our ministerial team will stand in agreement with you before the throne of grace.
                </p>
-               <button className="w-full py-3.5 bg-slate-900 text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-xl hover:bg-black transition-all shadow-xl shadow-slate-200">
+               <button 
+                onClick={onSubmitRequest}
+                className="w-full py-3.5 bg-slate-900 text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-xl hover:bg-black transition-all shadow-xl shadow-slate-200"
+               >
                   Submit Request
                </button>
             </div>
@@ -261,6 +281,62 @@ export const LandingPage = () => {
             </div>
          </div>
       </footer>
+
+      {/* Announcement Detail Modal */}
+      <AnimatePresence>
+        {selectedAnnouncement && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedAnnouncement(null)}
+              className="absolute inset-0 bg-slate-900/90 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-2xl bg-white rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[80vh]"
+            >
+              <div className="p-8 md:p-12 overflow-y-auto">
+                <button 
+                  onClick={() => setSelectedAnnouncement(null)}
+                  className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-full transition-all"
+                >
+                  <X size={20} />
+                </button>
+                
+                <div className="flex items-center gap-3 mb-6">
+                  <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest px-3 py-1 bg-emerald-50 rounded-full">Official Announcement</span>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                    {new Date(selectedAnnouncement.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+                
+                <h2 className="text-3xl md:text-4xl font-display font-black text-slate-900 mb-6 leading-tight">
+                  {selectedAnnouncement.title}
+                </h2>
+                
+                <div className="prose prose-slate max-w-none">
+                  <p className="text-slate-600 text-lg leading-relaxed font-serif whitespace-pre-wrap">
+                    {selectedAnnouncement.content}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="p-8 bg-slate-50 border-t border-slate-100 flex justify-end">
+                <button 
+                  onClick={() => setSelectedAnnouncement(null)}
+                  className="px-8 py-3 bg-slate-900 text-white text-[11px] font-black uppercase tracking-widest rounded-full hover:bg-emerald-600 transition-all shadow-lg shadow-slate-200"
+                >
+                  Close Message
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

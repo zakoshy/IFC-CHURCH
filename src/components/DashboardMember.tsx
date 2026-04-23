@@ -27,9 +27,14 @@ interface Props {
 export function DashboardMember({ activeTab, profile, onTabChange }: Props) {
   
   const [sermons, setSermons] = React.useState<any[]>([]);
+  const [prayerRequests, setPrayerRequests] = React.useState<any[]>([]);
+  const [newRequest, setNewRequest] = React.useState('');
+  const [isPrivate, setIsPrivate] = React.useState(false);
+  const [submitting, setSubmitting] = React.useState(false);
 
   React.useEffect(() => {
     if (activeTab === 'sermons') fetchPublishedSermons();
+    if (activeTab === 'requests') fetchPrayerRequests();
   }, [activeTab]);
 
   async function fetchPublishedSermons() {
@@ -37,12 +42,135 @@ export function DashboardMember({ activeTab, profile, onTabChange }: Props) {
     if (data) setSermons(data);
   }
 
+  async function fetchPrayerRequests() {
+    const { data } = await supabase.from('prayer_requests')
+      .select('*, profiles(full_name)')
+      .eq('is_private', false)
+      .order('created_at', { ascending: false });
+    if (data) setPrayerRequests(data);
+  }
+
+  const handleSubmitRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newRequest.trim() || !profile) return;
+
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.from('prayer_requests').insert([{
+        user_id: profile.id,
+        request_text: newRequest,
+        is_private: isPrivate
+      }]);
+
+      if (!error) {
+        setNewRequest('');
+        setIsPrivate(false);
+        fetchPrayerRequests();
+        alert('Your prayer request has been submitted to the ministerial team.');
+      }
+    } catch (err) {
+      console.error('Error submitting prayer request:', err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   if (activeTab === 'counseling') {
     return <CounselingChat userId={profile?.id} />;
   }
 
   if (activeTab === 'give') {
     return <MpesaPayment />;
+  }
+
+  if (activeTab === 'requests') {
+    return (
+      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <header>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Prayer Wall</h1>
+          <p className="text-sm text-slate-500 mt-1">"The prayer of a righteous person is powerful and effective." — James 5:16</p>
+        </header>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Submission Form */}
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm sticky top-6">
+              <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2 uppercase text-xs tracking-widest">
+                <Heart size={16} className="text-emerald-500" />
+                Submit Request
+              </h3>
+              <form onSubmit={handleSubmitRequest} className="space-y-4">
+                <textarea 
+                  required
+                  value={newRequest}
+                  onChange={e => setNewRequest(e.target.value)}
+                  placeholder="How can we pray for you today?"
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all min-h-[150px] resize-none"
+                />
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="checkbox" 
+                    id="private"
+                    checked={isPrivate}
+                    onChange={e => setIsPrivate(e.target.checked)}
+                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300"
+                  />
+                  <label htmlFor="private" className="text-xs text-slate-500 font-medium cursor-pointer uppercase tracking-widest">
+                    Submit as Anonymous
+                  </label>
+                </div>
+                <button 
+                  type="submit"
+                  disabled={submitting || !newRequest.trim()}
+                  className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-black transition-all shadow-xl shadow-slate-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {submitting ? 'Submitting...' : 'Post to Wall'}
+                </button>
+              </form>
+            </div>
+          </div>
+
+          {/* Public Wall */}
+          <div className="lg:col-span-2 space-y-6">
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Live Prayer Stream</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {prayerRequests.map((req) => (
+                <div key={req.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-4 hover:border-emerald-200 transition-colors">
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-emerald-50 flex items-center justify-center text-[10px] font-bold text-emerald-600 border border-emerald-100">
+                        {req.profiles?.full_name?.[0] || 'A'}
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        {req.is_private ? 'Anonymous' : req.profiles?.full_name}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-300 font-mono">
+                      {req.created_at ? format(new Date(req.created_at), 'MMM d') : ''}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-700 italic font-serif leading-relaxed line-clamp-4">"{req.request_text}"</p>
+                  <div className="pt-4 border-t border-slate-50 flex items-center gap-2">
+                    <div className={`w-1.5 h-1.5 rounded-full ${
+                      req.status === 'active' ? 'bg-amber-400' : 'bg-emerald-400'
+                    }`}></div>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                      {req.status === 'active' ? 'Ministerial Team Reviewing' : 'Agreement in Prayer'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {prayerRequests.length === 0 && (
+              <div className="py-20 flex flex-col items-center justify-center text-slate-300 bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-100">
+                <Heart size={48} className="mb-4 opacity-20" />
+                <p className="text-xs font-black uppercase tracking-widest text-[10px]">The prayer wall is empty. Be the first to share.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (activeTab === 'sermons') {
@@ -170,25 +298,25 @@ export function DashboardMember({ activeTab, profile, onTabChange }: Props) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Activity */}
+        {/* Support Card */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 overflow-hidden">
           <h3 className="font-bold text-slate-900 mb-6 flex items-center gap-2 uppercase text-xs tracking-widest">
-            <Clock size={16} className="text-emerald-500" />
-            My Recent Records
+            <Heart size={16} className="text-emerald-500" />
+            Spiritual Journey
           </h3>
           <div className="space-y-5">
             <div className="flex gap-4 items-start group">
               <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full mt-2 shrink-0 group-hover:scale-150 transition-transform"></div>
               <div>
-                <p className="text-sm font-bold text-slate-800">Attended Sunday Service</p>
-                <p className="text-[11px] text-slate-400 mt-0.5 font-medium uppercase tracking-tight">2 days ago • Main Sanctuary</p>
+                <p className="text-sm font-bold text-slate-800">Account Active</p>
+                <p className="text-[11px] text-slate-400 mt-0.5 font-medium uppercase tracking-tight">You are part of the IFC Family</p>
               </div>
             </div>
             <div className="flex gap-4 items-start group">
               <div className="w-1.5 h-1.5 bg-slate-300 rounded-full mt-2 shrink-0 group-hover:bg-emerald-400 transition-colors"></div>
               <div>
-                <p className="text-sm font-bold text-slate-800">Sent Tithe (KES 2,000)</p>
-                <p className="text-[11px] text-slate-400 mt-0.5 font-medium uppercase tracking-tight">5 days ago • RCX44A1</p>
+                <p className="text-sm font-bold text-slate-800">Member Status: Verified</p>
+                <p className="text-[11px] text-slate-400 mt-0.5 font-medium uppercase tracking-tight">Full access to church resources</p>
               </div>
             </div>
           </div>

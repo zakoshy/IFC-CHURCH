@@ -18,7 +18,8 @@ import {
   Send,
   Share2,
   Heart,
-  MessageCircle
+  MessageCircle,
+  Search
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
@@ -37,6 +38,8 @@ import { format, subDays, startOfWeek, endOfWeek } from 'date-fns';
 import { CounselingChat } from './CounselingChat';
 import { Profile } from '../types';
 import { checkLimit, incrementUsage } from '../lib/usage';
+import { sanitizeText } from '../lib/security';
+import { handleSupabaseError, getFriendlyMessage } from '../lib/errors';
 
 interface Props {
   activeTab: string;
@@ -73,11 +76,14 @@ export function DashboardPastor({ activeTab, profile, onTabChange }: Props) {
     { name: 'Mar 9', count: 630 },
   ];
 
+  const [members, setMembers] = useState<Profile[]>([]);
+
   useEffect(() => {
     fetchStats();
     fetchAnnouncements();
     if (activeTab === 'requests') fetchPrayerRequests();
     if (activeTab === 'sermons') fetchSermons();
+    if (activeTab === 'members') fetchMembers();
     if (profile?.id) {
        checkLimit(profile.id, 'sermon').then(res => {
          setSermonsRemaining(res.remaining);
@@ -85,6 +91,11 @@ export function DashboardPastor({ activeTab, profile, onTabChange }: Props) {
        });
     }
   }, [activeTab, profile]);
+
+  async function fetchMembers() {
+    const { data } = await supabase.from('profiles').select('*').eq('role', 'member').order('full_name');
+    if (data) setMembers(data);
+  }
 
   async function fetchAnnouncements() {
     const { data } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
@@ -117,11 +128,12 @@ export function DashboardPastor({ activeTab, profile, onTabChange }: Props) {
     setGeneratingSermon(true);
     setSermonPreview(null);
     try {
+      const cleanTopic = sanitizeText(sermonTopic.trim());
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [{
           role: 'user',
-          parts: [{ text: `Generate a complete Christian sermon for a Kenyan audience based on this topic: ${sermonTopic}. 
+          parts: [{ text: `Generate a complete Christian sermon for a Kenyan audience based on this topic: ${cleanTopic}. 
           The sermon should have:
           1. A bold Title
           2. Multiple Bible references
@@ -144,23 +156,32 @@ export function DashboardPastor({ activeTab, profile, onTabChange }: Props) {
   };
 
   const saveSermon = async (publish: boolean) => {
-    if (!sermonPreview) return;
+    if (!sermonPreview || !profile) return;
+    
+    // Defensive check for title
+    const finalTitle = sanitizeText(sermonTopic.trim()) || 'Untitled Sermon';
     
     try {
       const { error } = await supabase.from('sermons').insert([{
-        title: sermonTopic,
+        title: finalTitle,
         content: sermonPreview,
-        speaker: 'Admin/Pastor',
-        is_published: publish
+        speaker: profile.full_name || 'Pastor',
+        is_published: publish,
+        summary: finalTitle
       }]);
 
       if (!error) {
         setSermonTopic('');
         setSermonPreview(null);
         fetchSermons();
+        alert(publish ? 'Sermon published successfully!' : 'Sermon saved successfully!');
+      } else {
+        const appError = handleSupabaseError(error);
+        alert(getFriendlyMessage(appError));
       }
-    } catch (err) {
-      console.error('Error saving sermon:', err);
+    } catch (err: any) {
+      console.error('Unexpected Error saving sermon:', err);
+      alert('An unexpected error occurred. Please try again.');
     }
   };
 
@@ -211,6 +232,72 @@ export function DashboardPastor({ activeTab, profile, onTabChange }: Props) {
       { id: 4, type: 'prayer', message: 'Urgent prayer request from Mary N.', time: '1d ago' },
     ]);
     setLoading(false);
+  }
+
+  if (activeTab === 'members') {
+    return (
+      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Church Membership</h1>
+            <p className="text-sm text-slate-500 mt-1">
+              View and manage all registered members of IFC CHURCH.
+            </p>
+          </div>
+          <div className="flex items-center gap-4 bg-white px-4 py-3 rounded-xl border border-slate-200 shadow-sm">
+             <div className="text-center">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Registered</p>
+                <p className="text-lg font-bold text-slate-900">{members.length} Members</p>
+             </div>
+          </div>
+        </header>
+
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden min-h-[400px]">
+          <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Member Registry</h3>
+            <div className="relative">
+               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+               <input 
+                type="text" 
+                placeholder="Find a member..."
+                className="pl-9 pr-4 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-emerald-500 transition-all w-48"
+               />
+            </div>
+          </div>
+
+          <div className="divide-y divide-slate-50">
+            {members.map(member => (
+              <div key={member.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center text-xs font-bold text-white border border-emerald-500 shadow-sm">
+                    {member.full_name.split(' ').map(n => n[0]).join('')}
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">{member.full_name}</p>
+                    <p className="text-[10px] text-slate-400 font-medium">{member.phone_number}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                   <div className="hidden sm:flex flex-col items-end">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Role</span>
+                      <span className="text-[10px] font-bold text-emerald-600 uppercase">{member.role}</span>
+                   </div>
+                   <button className="p-2 text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-all">
+                      <Send size={14} />
+                   </button>
+                </div>
+              </div>
+            ))}
+            {members.length === 0 && (
+              <div className="py-20 flex flex-col items-center justify-center text-slate-300">
+                <Users size={48} className="mb-4 opacity-20" />
+                <p className="text-xs font-black uppercase tracking-widest">No members found</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (activeTab === 'manage_landing') {
@@ -384,9 +471,9 @@ export function DashboardPastor({ activeTab, profile, onTabChange }: Props) {
             <p className="text-xs text-slate-500 mt-1 uppercase font-bold tracking-widest">Personal Guidance & Oversight</p>
           </div>
           <div className="flex items-center gap-2">
-             <div className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
-                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
-                System Active
+             <div className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+                <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse"></div>
+                Angelic Support Active
              </div>
           </div>
         </header>
@@ -462,10 +549,10 @@ export function DashboardPastor({ activeTab, profile, onTabChange }: Props) {
            {/* Generator Sidebar */}
            <div className="lg:col-span-1 space-y-6">
               <div className="bg-slate-900 rounded-2xl p-6 text-white shadow-xl shadow-slate-200">
-                 <div className="w-12 h-12 bg-emerald-500 rounded-xl flex items-center justify-center mb-6 shadow-lg shadow-emerald-500/20">
+                 <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center mb-6 shadow-lg shadow-indigo-500/20">
                     <Sparkles size={24} />
                  </div>
-                 <h3 className="text-xl font-bold mb-2">AI Sermon Generator</h3>
+                 <h3 className="text-xl font-bold mb-2">Sermon Generator</h3>
                  <p className="text-slate-400 text-xs mb-6 leading-relaxed">Describe the topic, theme, or Bible verse you want to preach about. Our AI will craft a deep, scriptural outline for you.</p>
                                  <form onSubmit={handleGenerateSermon} className="space-y-4">
                     <div className="space-y-1.5">
@@ -530,7 +617,7 @@ export function DashboardPastor({ activeTab, profile, onTabChange }: Props) {
                         onClick={() => saveSermon(false)}
                         className="bg-white border border-emerald-200 text-emerald-700 font-bold py-2.5 rounded-xl text-xs hover:bg-emerald-50 transition-all"
                       >
-                        Keep Draft
+                        Save
                       </button>
                       <button 
                         onClick={() => saveSermon(true)}
@@ -647,7 +734,7 @@ export function DashboardPastor({ activeTab, profile, onTabChange }: Props) {
           { label: 'Active Members', value: '1,482', icon: Users, trend: '+12 this month', color: 'text-emerald-600' },
           { label: 'Monthly Tithing (KES)', value: `KES 642,500`, icon: HandCoins, trend: '88% of target', color: 'text-emerald-600' },
           { label: 'New Visitors (7d)', value: '24', icon: AlertCircle, trend: '8 Pending Follow-up', color: 'text-amber-500' },
-          { label: 'Attendance Average', value: `82%`, icon: TrendingUp, trend: 'Based on past 4 Sundays', color: 'text-slate-400' },
+          { label: 'Prayer Network', value: 'Active', icon: Heart, trend: 'Pastoral engagement', color: 'text-slate-400' },
         ].map((stat, i) => (
           <motion.div 
             key={i}
@@ -706,42 +793,13 @@ export function DashboardPastor({ activeTab, profile, onTabChange }: Props) {
               </table>
             </div>
           </div>
-
-          {/* Urgent Follow-Up */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
-            <div className="p-4 border-b border-slate-100">
-              <h2 className="font-bold text-slate-800">Urgent Follow-Up Required</h2>
-            </div>
-            <div className="p-4 space-y-4">
-              <div className="flex items-center justify-between p-3 bg-red-50 border border-red-100 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                  <div>
-                    <p className="text-sm font-bold text-red-900 leading-none">Samuel Njuguna</p>
-                    <p className="text-[11px] text-red-700 mt-1">Absent 3 consecutive weeks</p>
-                  </div>
-                </div>
-                <button className="px-3 py-1 bg-white border border-red-200 text-red-600 text-[10px] font-bold rounded shadow-sm hover:bg-red-50 transition-colors">REACH OUT</button>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-amber-50 border border-amber-100 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-                  <div>
-                    <p className="text-sm font-bold text-amber-900 leading-none">Grace Njeri (Visitor)</p>
-                    <p className="text-[11px] text-amber-700 mt-1">First-time guest last Sunday</p>
-                  </div>
-                </div>
-                <button className="px-3 py-1 bg-white border border-amber-200 text-amber-600 text-[10px] font-bold rounded shadow-sm hover:bg-amber-50 transition-colors">WELCOME</button>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* AI Counselor Flags */}
         <div className="flex flex-col gap-6">
           <div className="bg-slate-900 rounded-xl p-6 text-white shadow-lg shadow-slate-200">
-            <div className="w-10 h-10 bg-emerald-500 rounded-lg flex items-center justify-center mb-4">
-              <MessageCircle size={20} />
+            <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center mb-4 shadow-lg shadow-indigo-500/20">
+              <Sparkles size={20} />
             </div>
             <h3 className="font-bold text-lg mb-2">Scripture Counseling</h3>
             <p className="text-slate-400 text-xs leading-relaxed mb-6">
@@ -749,7 +807,7 @@ export function DashboardPastor({ activeTab, profile, onTabChange }: Props) {
             </p>
             <button 
               onClick={() => onTabChange('counseling')}
-              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-emerald-900/20"
+              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-indigo-900/20"
             >
               Start Consultation
             </button>

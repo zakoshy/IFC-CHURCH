@@ -6,6 +6,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { checkLimit, incrementUsage } from '../lib/usage';
 
+import { sanitizeText } from '../lib/security';
+import { handleSupabaseError, getFriendlyMessage } from '../lib/errors';
+
 interface Props {
   userId?: string;
   isPastor?: boolean;
@@ -60,7 +63,7 @@ export function CounselingChat({ userId, isPastor }: Props) {
       return;
     }
 
-    const userMessage = input.trim();
+    const userMessage = sanitizeText(input.trim());
     setInput('');
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setLoading(true);
@@ -81,7 +84,7 @@ export function CounselingChat({ userId, isPastor }: Props) {
       
       setMessages(prev => [...prev, { 
         role: 'ai', 
-        content: data.response,
+        content: sanitizeText(data.response),
         verses: data.bible_verses
       }]);
 
@@ -142,14 +145,19 @@ export function CounselingChat({ userId, isPastor }: Props) {
       {/* Chat Header */}
       <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center text-emerald-500 shadow-lg shadow-slate-900/10">
-            <Bot size={24} />
+          <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-indigo-200 relative overflow-hidden">
+             <motion.div 
+               animate={{ opacity: [0.4, 0.8, 0.4] }}
+               transition={{ repeat: Infinity, duration: 3 }}
+               className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent"
+             />
+             <Sparkles size={24} />
           </div>
           <div>
             <h3 className="font-bold text-slate-900 text-sm tracking-tight">Scripture Counselor</h3>
             <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-              <span className="text-[9px] uppercase font-bold tracking-widest text-slate-400">System Secure</span>
+              <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse"></span>
+              <span className="text-[9px] uppercase font-bold tracking-widest text-slate-400">Angelic Support Active</span>
             </div>
           </div>
         </div>
@@ -174,14 +182,14 @@ export function CounselingChat({ userId, isPastor }: Props) {
         {messages.map((msg, i) => (
           <motion.div 
             key={i}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
             className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
           >
             <div className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center shadow-sm ${
-              msg.role === 'user' ? 'bg-white border border-slate-100 text-slate-600' : 'bg-slate-900 text-emerald-400'
+              msg.role === 'user' ? 'bg-white border border-slate-100 text-slate-600' : 'bg-indigo-600 text-white'
             }`}>
-              {msg.role === 'user' ? <User size={14} /> : <Book size={14} />}
+              {msg.role === 'user' ? <User size={14} /> : <Sparkles size={14} />}
             </div>
             <div className={`max-w-[80%] space-y-2 ${msg.role === 'user' ? 'text-right' : ''}`}>
               <div className={`inline-block px-4 py-2.5 rounded-2xl text-[13px] leading-relaxed shadow-sm ${
@@ -204,13 +212,13 @@ export function CounselingChat({ userId, isPastor }: Props) {
         ))}
         {loading && (
           <div className="flex gap-3">
-            <div className="w-8 h-8 rounded-lg bg-slate-900 text-emerald-400 flex items-center justify-center">
-              <Book size={14} />
+            <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center">
+              <Sparkles size={14} />
             </div>
             <div className="bg-white border border-slate-100 px-4 py-2.5 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-1.5">
-              <div className="w-1 h-1 bg-emerald-500 rounded-full animate-bounce"></div>
-              <div className="w-1 h-1 bg-emerald-500 rounded-full animate-bounce [animation-delay:0.2s]"></div>
-              <div className="w-1 h-1 bg-emerald-500 rounded-full animate-bounce [animation-delay:0.4s]"></div>
+              <div className="w-1 h-1 bg-indigo-500 rounded-full animate-bounce"></div>
+              <div className="w-1 h-1 bg-indigo-500 rounded-full animate-bounce [animation-delay:0.2s]"></div>
+              <div className="w-1 h-1 bg-indigo-500 rounded-full animate-bounce [animation-delay:0.4s]"></div>
             </div>
           </div>
         )}

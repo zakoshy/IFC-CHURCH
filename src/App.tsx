@@ -16,7 +16,8 @@ import {
   Search,
   Book,
   Home,
-  Megaphone
+  Megaphone,
+  Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DashboardPastor } from './components/DashboardPastor';
@@ -99,8 +100,7 @@ export default function App() {
     { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
     { id: 'manage_landing', label: 'Notifications', icon: Bell },
     { id: 'members', label: 'Members', icon: Users },
-    { id: 'attendance', label: 'Attendance', icon: Calendar },
-    { id: 'counseling', label: 'Scripture Counselor', icon: MessageCircle },
+    { id: 'counseling', label: 'Scripture Counselor', icon: Sparkles },
     { id: 'finances', label: 'Giving (M-Pesa)', icon: HandCoins },
     { id: 'requests', label: 'Prayer Wall', icon: Heart },
     { id: 'sermons', label: 'Sermons', icon: BookOpen },
@@ -108,9 +108,8 @@ export default function App() {
   ] : [
     { id: 'landing', label: 'Landing Page', icon: Home },
     { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
-    { id: 'counseling', label: 'Scripture Counselor', icon: MessageCircle },
+    { id: 'counseling', label: 'Scripture Counselor', icon: Sparkles },
     { id: 'give', label: 'Give via M-Pesa', icon: HandCoins },
-    { id: 'attendance', label: 'My Record', icon: Calendar },
     { id: 'requests', label: 'Prayer Requests', icon: Heart },
     { id: 'bible', label: 'Holy Bible', icon: Book },
   ];
@@ -255,7 +254,23 @@ export default function App() {
             ) : null}
 
             {activeTab === 'landing' ? (
-              <LandingPage />
+              <LandingPage 
+                onJoin={() => setShowAuth(true)}
+                onSubmitRequest={() => {
+                  if (session) {
+                    setActiveTab('requests');
+                  } else {
+                    setShowAuth(true);
+                  }
+                }}
+                onWatchSermons={() => {
+                  if (session) {
+                    setActiveTab('sermons');
+                  } else {
+                    setShowAuth(true);
+                  }
+                }}
+              />
             ) : activeTab === 'bible' ? (
               <BibleReader />
             ) : !session ? (

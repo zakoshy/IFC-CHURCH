@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { motion } from 'motion/react';
 import { Mail, Lock, User, Phone, Church, ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { sanitizeText, isBot } from '../lib/security';
+import { handleSupabaseError, getFriendlyMessage } from '../lib/errors';
 
 interface AuthFormProps {
   onBack?: () => void;
@@ -13,6 +15,7 @@ export function AuthForm({ onBack }: AuthFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [honeypot, setHoneypot] = useState(''); // Anti-bot field
   const [role, setRole] = useState<'member' | 'pastor'>('member');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -20,33 +23,44 @@ export function AuthForm({ onBack }: AuthFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // DDoS/Bot Mitigation: Honeypot check
+    if (isBot(honeypot)) {
+      console.warn('Bot detected');
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      const isPastorEmail = email.toLowerCase() === 'zakayooshome254@gmail.com' || email.toLowerCase() === 'edwindezak@gmail.com';
+      const cleanEmail = sanitizeText(email.trim());
+      const cleanName = sanitizeText(fullName.trim());
+      
+      const isPastorEmail = cleanEmail.toLowerCase() === 'zakayooshome254@gmail.com' || cleanEmail.toLowerCase() === 'edwindezak@gmail.com';
       const finalRole = isPastorEmail ? 'pastor' : role;
 
       if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        const { error: loginError } = await supabase.auth.signInWithPassword({ 
+          email: cleanEmail, 
+          password 
+        });
+        if (loginError) throw loginError;
       } else {
-        const { data, error: signUpError } = await supabase.auth.signUp({ 
-          email, 
+        const { error: signUpError } = await supabase.auth.signUp({ 
+          email: cleanEmail, 
           password,
           options: {
-            data: { full_name: fullName, role: finalRole }
+            data: { full_name: cleanName, role: finalRole }
           }
         });
         if (signUpError) throw signUpError;
         
         setSuccess(true);
-        // Removed manual profile insertion here because we now use a 
-        // Database Trigger (on_auth_user_created) in Supabase to handle this automatically.
-        // This prevents "New row violates row-level security policy" errors.
       }
     } catch (err: any) {
-      setError(err.message);
+      const appError = handleSupabaseError(err);
+      setError(getFriendlyMessage(appError));
     } finally {
       setLoading(false);
     }
@@ -60,13 +74,14 @@ export function AuthForm({ onBack }: AuthFormProps) {
           animate={{ opacity: 1, scale: 1 }}
           className="max-w-md w-full bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 p-8 my-auto text-center"
         >
-          <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Mail size={40} />
+          <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+            <Mail size={40} className="animate-bounce" />
           </div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">Check your email</h2>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">Activation Link Sent!</h2>
           <p className="text-slate-600 mb-8 leading-relaxed">
-            We've sent a verification link to <span className="font-semibold text-slate-900">{email}</span>. 
-            Please click the link in the email to verify your account and continue.
+            We've sent a secure verification link to <span className="font-semibold text-slate-900">{email}</span>. 
+            <br /><br />
+            <span className="text-amber-600 font-bold">Important:</span> You must click the link in that email to activate your account before you can log in. If you don't see it, check your spam folder.
           </p>
           <div className="space-y-4">
             <button 
@@ -111,6 +126,27 @@ export function AuthForm({ onBack }: AuthFormProps) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Honeypot field - Hidden from users, filled by bots */}
+          <div className="hidden" aria-hidden="true">
+            <input 
+              type="text" 
+              name="website" 
+              tabIndex={-1} 
+              autoComplete="off" 
+              value={honeypot}
+              onChange={(e) => setHoneypot(e.target.value)}
+            />
+          </div>
+
+          {!isLogin && (
+            <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg mb-4 flex items-start gap-3">
+              <Mail className="text-blue-500 shrink-0" size={16} />
+              <p className="text-[10px] text-blue-700 font-medium leading-relaxed">
+                <span className="font-bold">Security Notice:</span> For your protection, every new account requires email verification. You'll receive a link to activate your account immediately after signing up.
+              </p>
+            </div>
+          )}
+
           {!isLogin && (
             <>
               <div className="space-y-1">

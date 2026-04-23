@@ -2,6 +2,8 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -9,6 +11,26 @@ const __dirname = path.dirname(__filename);
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  // Security Headers (CSP, XSS, etc.)
+  app.use(
+    helmet({
+      contentSecurityPolicy: false, // Vite needs inline scripts in dev
+      crossOriginEmbedderPolicy: false,
+    })
+  );
+
+  // Rate Limiting (DDoS Protection)
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per window
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: "Too many requests from this IP, please try again after 15 minutes",
+  });
+
+  // Apply rate limit specifically to API routes
+  app.use("/api/", limiter);
 
   app.use(express.json());
 
